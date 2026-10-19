@@ -1,6 +1,6 @@
 /* TIDEBREAKERS service worker — offline play after the first visit.
    Bump VERSION whenever you ship changed game files. */
-const VERSION = 'tidebreakers-v1';
+const VERSION = 'tidebreakers-v2';
 const CORE = [
   './', './index.html', './style.css', './manifest.webmanifest',
   './js/core.js', './js/skin.js', './js/audio.js', './js/gfx.js', './js/models.js', './js/world.js',

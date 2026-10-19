@@ -31,6 +31,8 @@ function init() {
   $('panel').addEventListener('pointerdown', e => { if (e.target === $('panel')) closePanel(); });
   $('pauseBtn').addEventListener('click', () => TB.Game.pause(true));
   $('objective').addEventListener('click', () => openPanel('quests'));
+  $('minimap').addEventListener('click', toggleMinimap);
+  $('minimap').style.cursor = 'pointer';
   $('buildTabs').innerHTML = D.CATS.map(c => `<button type="button" class="sk-tab" data-tab="${c.key}" role="tab">${I(c.icon)}${c.name}</button>`).join('');
   $('buildTabs').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { TB.Snd.play('click'); build.tab = b.dataset.tab; build.sel = null; TB.Town.overlay(null); TB.Town.clearPreview(); renderBuild(); }));
   if (isTouch()) document.body.classList.add('touch-ui');
@@ -256,47 +258,84 @@ function markers() {
 }
 
 // ------------------------------------------------------------ minimap
+// Centred on the player's boat and turned with the camera ("up" on the map is "up" on screen).
+// Tap it to switch between the close view and the whole sea.
+const MM_RANGES = [110, 310];
+let mmZoom = 0;
+try { mmZoom = +localStorage.getItem('tb.mmZoom') || 0; } catch (e) { /* storage blocked */ }
+function toggleMinimap() {
+  mmZoom = (mmZoom + 1) % MM_RANGES.length;
+  try { localStorage.setItem('tb.mmZoom', mmZoom); } catch (e) { /* storage blocked */ }
+  TB.Snd.play('click'); mmT = 0;
+}
 function minimap() {
-  const cv = $('mmCanvas'), c = cv.getContext('2d'), S = cv.width, G = TB.G, P = TB.Boat.P;
-  const range = 300, k = (S / 2 - 6) / range;
-  const yaw = TB.Gfx.cam.yaw;
+  const cv = $('mmCanvas'), c = cv.getContext('2d'), S = cv.width, P = TB.Boat.P;
+  const range = MM_RANGES[mmZoom], R = S / 2 - 4, k = R / range;
+  const yaw = TB.Gfx.cam.yaw, cs = Math.cos(yaw), sn = Math.sin(yaw);
+  const cx = P ? P.x : 0, cz = P ? P.z : 0;
+  // world point → canvas point (same rotation the canvas transform applies)
+  const toMap = (x, z) => { const dx = (x - cx) * k, dz = (z - cz) * k; return { x: S / 2 + dx * cs - dz * sn, y: S / 2 + dx * sn + dz * cs, d: Math.hypot(dx, dz) }; };
   c.setTransform(1, 0, 0, 1, 0, 0);
   c.clearRect(0, 0, S, S);
-  const g = c.createRadialGradient(S / 2, S / 2, 10, S / 2, S / 2, S / 2);
+  c.save();
+  c.beginPath(); c.arc(S / 2, S / 2, R, 0, Math.PI * 2); c.clip();
+  const g = c.createRadialGradient(S / 2, S / 2, 10, S / 2, S / 2, R);
   g.addColorStop(0, '#1a8fb0'); g.addColorStop(1, '#0b4a66');
-  c.fillStyle = g; c.beginPath(); c.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2); c.fill();
-  // rotate with the camera so "up" on the map is "up" on screen
-  c.translate(S / 2, S / 2); c.rotate(yaw); c.scale(k, k);
-  const dot = (x, z, r, col) => { c.fillStyle = col; c.beginPath(); c.arc(x, z, r / k, 0, Math.PI * 2); c.fill(); };
-  c.fillStyle = 'rgba(255,255,255,0.08)'; c.beginPath(); c.arc(0, 0, D.WORLD_R, 0, Math.PI * 2); c.lineWidth = 2 / k; c.strokeStyle = 'rgba(255,255,255,0.18)'; c.stroke();
+  c.fillStyle = g; c.fillRect(0, 0, S, S);
+  c.translate(S / 2, S / 2); c.rotate(yaw); c.scale(k, k); c.translate(-cx, -cz);
+  const dot = (x, z, r, col, ring) => {
+    if (Math.abs(x - cx) > range + 10 || Math.abs(z - cz) > range + 10) return;
+    c.fillStyle = col; c.beginPath(); c.arc(x, z, r / k, 0, Math.PI * 2); c.fill();
+    if (ring) { c.lineWidth = 2.5 / k; c.strokeStyle = '#0b1820'; c.stroke(); }
+  };
+  // edge of the sailable sea
+  c.beginPath(); c.arc(0, 0, D.WORLD_R, 0, Math.PI * 2); c.lineWidth = 3 / k; c.strokeStyle = 'rgba(255,255,255,0.35)'; c.setLineDash([10 / k, 8 / k]); c.stroke(); c.setLineDash([]);
   for (const r of TB.World.ruins) {
+    if (Math.abs(r.x - cx) > range + 20 || Math.abs(r.z - cz) > range + 20) continue;
     c.save(); c.translate(r.x, r.z); c.rotate(-r.rot);
-    c.fillStyle = r.outpost ? '#b93b46' : r.top > 0 ? 'rgba(220,214,196,0.85)' : 'rgba(150,200,210,0.25)';
+    c.fillStyle = r.outpost ? '#d4485a' : r.top > 0 ? 'rgba(232,226,208,0.9)' : 'rgba(150,210,220,0.28)';
     c.fillRect(-r.w / 2, -r.d / 2, r.w, r.d); c.restore();
   }
-  for (const it of TB.World.items) dot(it.x, it.z, 1.2, it.life ? '#ffd24a' : 'rgba(255,230,190,0.65)');
-  for (const cell of TB.Town.cells.values()) { const p = TB.Town.world(cell.i, cell.j); c.fillStyle = cell.b ? '#f8c55b' : '#c48a52'; c.fillRect(p.x - 2, p.z - 2, 4, 4); }
-  for (const d of TB.World.dives) dot(d.x, d.z, 3, '#ff9a3a');
-  for (const ca of TB.World.castaways) dot(ca.x, ca.z, 3.2, '#79ffc8');
-  for (const n of TB.Actors.npcs) dot(n.x, n.z, 3.5, n.kind === 'merchant' ? '#ffd24a' : '#ffffff');
-  for (const e of TB.Actors.list) if (e.alive && !e.hidden) dot(e.x, e.z, e.d.boss ? 6 : e.type === 'shark' ? 2.4 : 3, e.type === 'shark' ? '#a9c3cc' : '#ff4a4a');
+  for (const cell of TB.Town.cells.values()) {
+    const p = TB.Town.world(cell.i, cell.j);
+    c.fillStyle = cell.kind === 'pier' ? '#9a6b43' : cell.b ? '#f8c55b' : '#d9a46a';
+    c.fillRect(p.x - D.TILE / 2, p.z - D.TILE / 2, D.TILE, D.TILE);
+  }
+  for (const it of TB.World.items) dot(it.x, it.z, it.life ? 4 : 3, it.life ? '#ffd24a' : 'rgba(255,236,200,0.8)');
+  for (const d of TB.World.dives) dot(d.x, d.z, 7, '#ff9a3a', true);
+  for (const ca of TB.World.castaways) dot(ca.x, ca.z, 7, '#79ffc8', true);
+  for (const n of TB.Actors.npcs) dot(n.x, n.z, 8, n.kind === 'merchant' ? '#ffd24a' : '#ffffff', true);
+  for (const e of TB.Actors.list) if (e.alive && !e.hidden) dot(e.x, e.z, e.d.boss ? 12 : e.type === 'boarder' ? 4 : 7, e.type === 'shark' ? '#c4d4dc' : '#ff4a4a', true);
+  c.restore();
+  // things beyond the map edge: home, raiders, the merchant
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  const edge = (x, z, col, label) => {
+    const p = toMap(x, z); if (p.d <= R - 8) return;
+    const a = Math.atan2(p.y - S / 2, p.x - S / 2), ex = S / 2 + Math.cos(a) * (R - 12), ey = S / 2 + Math.sin(a) * (R - 12);
+    c.fillStyle = col; c.strokeStyle = '#0b1820'; c.lineWidth = 3;
+    c.beginPath(); c.arc(ex, ey, 10, 0, Math.PI * 2); c.fill(); c.stroke();
+    if (label) { c.fillStyle = '#0b1820'; c.font = 'bold 14px Nunito, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(label, ex, ey + 1); }
+  };
+  edge(D.DOCK.x, D.DOCK.z, '#79dfc1', 'H');
+  const m = TB.Actors.merchant(); if (m) edge(m.x, m.z, '#ffd24a', '$');
+  for (const e of TB.Actors.list) if (e.alive && !e.hidden && (e.raid || e.d.boss) && e.type !== 'boarder') edge(e.x, e.z, '#ff4a4a', '!');
+  // the player's boat: a big arrow in the middle
   if (P) {
-    c.save(); c.translate(P.x, P.z); c.rotate(-P.h);
-    c.fillStyle = '#fff'; c.strokeStyle = '#0b1820'; c.lineWidth = 1.5 / k;
-    c.beginPath(); c.moveTo(0, 7 / k); c.lineTo(4.5 / k, -5 / k); c.lineTo(0, -2.5 / k); c.lineTo(-4.5 / k, -5 / k); c.closePath(); c.fill(); c.stroke();
+    c.save(); c.translate(S / 2, S / 2); c.rotate(yaw - P.h);
+    c.fillStyle = 'rgba(255,255,255,0.18)'; c.beginPath(); c.arc(0, 0, 26, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#ffffff'; c.strokeStyle = '#0b1820'; c.lineWidth = 4; c.lineJoin = 'round';
+    c.beginPath(); c.moveTo(0, 22); c.lineTo(15, -14); c.lineTo(0, -6); c.lineTo(-15, -14); c.closePath(); c.fill(); c.stroke();
     c.restore();
   }
   // compass letters
-  c.setTransform(1, 0, 0, 1, 0, 0);
   c.font = 'bold 22px Nunito, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-  const rr = S / 2 - 16;
-  const cs = Math.cos(yaw), sn = Math.sin(yaw);
+  const rr = R - 14;
   for (const [l, wx, wz] of [['N', 0, -1], ['E', 1, 0], ['S', 0, 1], ['W', -1, 0]]) {
     const px = S / 2 + (wx * cs - wz * sn) * rr, py = S / 2 + (wx * sn + wz * cs) * rr;
     c.fillStyle = l === 'N' ? '#ff8a7a' : '#f4f1ea'; c.strokeStyle = '#0b1820'; c.lineWidth = 4;
     c.strokeText(l, px, py); c.fillText(l, px, py);
   }
-  void G;
+  $('mmLabel').textContent = (mmZoom ? 'Whole sea' : range + ' m') + ' · tap';
 }
 
 // ------------------------------------------------------------ build mode
