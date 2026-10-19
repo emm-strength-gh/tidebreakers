@@ -1,0 +1,12 @@
+{
+  "_readme": "Replace UI art with your own sprites. Paths are relative to assets/ui/. Anything not listed keeps the built-in art. See docs/UI-SPRITES.md for every key.",
+  "icons": {
+    "_example_wood": "icons/wood.png"
+  },
+  "frames": {
+    "_example_panel": { "src": "frames/panel.png", "slice": 32, "width": 16 }
+  },
+  "images": {
+    "_example_logo": "logo.png"
+  }
+}

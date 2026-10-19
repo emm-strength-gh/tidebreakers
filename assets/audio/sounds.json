@@ -1,0 +1,3 @@
+{
+  "_readme": "Optional: replace synthesized sounds with files in this folder, e.g. \"gun\": \"gun.mp3\", \"ambient\": \"waves.ogg\". Names: gun, enemyGun, harpoon, cannon, boom, smallBoom, hit, hurt, splash, pickup, coin, rescue, build, click, deny, alarm, horn, sonar, dive, netOn, chapter, levelUp, dock, ambient."
+}

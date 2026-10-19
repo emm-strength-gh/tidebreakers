@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="description" content="Build a floating town from the ruins of a drowned world. Salvage, rescue, trade and defend what floats.">
+<meta name="theme-color" content="#142b38">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tidebreakers">
+<title>Tidebreakers</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;700;800;900&display=swap">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }</script>
+</head>
+<body>
+<canvas id="game" aria-label="Tidebreakers game view"></canvas>
+
+<!-- ================= HUD ================= -->
+<div id="hud" hidden>
+  <div id="topbar" class="sk-panel hud-top" aria-label="Town resources"></div>
+  <div id="clock" class="sk-panel hud-clock">
+    <span class="day-ico" data-ico="day"></span>
+    <div class="clock-text"><b id="dayNum">Day 1</b><span id="dayTime">06:00</span></div>
+    <button type="button" id="pauseBtn" class="icon-btn sk-button" aria-label="Pause"><span data-ico="pause"></span></button>
+  </div>
+  <div id="toasts" aria-live="polite"></div>
+  <div id="banner" class="sk-banner" hidden></div>
+  <div id="raidTimer" class="sk-toast_danger" hidden></div>
+
+  <nav id="leftbar" aria-label="Town menus">
+    <button type="button" class="side-btn sk-button" data-panel="quests"><span data-ico="quests"></span><em>Quests</em></button>
+    <button type="button" class="side-btn sk-button" data-panel="town"><span data-ico="town"></span><em>Town</em></button>
+    <button type="button" class="side-btn sk-button" id="tradeBtn" data-panel="trade" hidden><span data-ico="trade"></span><em>Trade</em></button>
+    <button type="button" class="side-btn sk-button" id="buildBtn"><span data-ico="build"></span><em>Build</em></button>
+  </nav>
+
+  <div id="objective" class="sk-panel"></div>
+
+  <div id="boatPanel" class="sk-panel">
+    <div class="zone" id="zoneName">Tidebreak Harbor</div>
+    <div class="bar-row"><span data-ico="hull"></span><div class="bar sk-bar_track"><i id="hullBar" class="sk-bar_hull"></i></div></div>
+    <div class="bar-row"><span data-ico="fuel"></span><div class="bar sk-bar_track"><i id="fuelBar" class="sk-bar_fuel"></i></div></div>
+    <div class="boat-stats">
+      <span title="Cargo"><span data-ico="cargo"></span><b id="cargoTxt">0/30</b></span>
+      <span title="Rescue seats"><span data-ico="castaway"></span><b id="seatTxt">0/2</b></span>
+      <span title="Harpoons"><span data-ico="harpoon"></span><b id="harpTxt">4</b></span>
+    </div>
+    <div id="dockChip" class="sk-chip" hidden><span data-ico="dock"></span>Docked · unloading, repairing, refuelling</div>
+  </div>
+
+  <div id="minimap" class="sk-minimap_frame"><canvas id="mmCanvas" width="320" height="320"></canvas><span class="mm-zoom" id="mmLabel"></span></div>
+
+  <div id="actionHint" hidden></div>
+  <div id="diveBar" class="sk-panel" hidden><span data-ico="dive"></span><div class="bar sk-bar_track"><i id="diveFill" class="sk-bar_oxygen"></i></div><b>Diving…</b></div>
+
+  <div id="markers"></div>
+  <div id="floaters"></div>
+
+  <!-- build mode -->
+  <div id="buildbar" class="sk-panel" hidden>
+    <div class="build-tabs" id="buildTabs" role="tablist"></div>
+    <div class="build-cards" id="buildCards"></div>
+    <div class="build-info" id="buildInfo"></div>
+    <button type="button" class="icon-btn sk-button build-close" id="buildClose" aria-label="Close build menu"><span data-ico="close"></span></button>
+  </div>
+  <div id="buildHint" class="sk-tooltip" hidden></div>
+
+  <!-- touch controls -->
+  <div id="touch" hidden>
+    <div id="joy" class="sk-joystick_base"><div id="joyKnob" class="sk-joystick_knob"></div></div>
+    <div class="tbtns">
+      <button type="button" class="tbtn big sk-touch_button" data-btn="fire"><span data-ico="gun"></span><em>GUN</em></button>
+      <button type="button" class="tbtn sk-touch_button" data-btn="harpoon"><span data-ico="harpoon"></span><em>HARPOON</em></button>
+      <button type="button" class="tbtn sk-touch_button" data-btn="action" id="actBtn"><span data-ico="net"></span><em>NET</em></button>
+      <button type="button" class="tbtn sk-touch_button" data-btn="sonar"><span data-ico="sonar"></span><em>SONAR</em></button>
+    </div>
+    <div class="tzoom">
+      <button type="button" class="icon-btn sk-button" data-btn="zoomin" aria-label="Zoom in"><span data-ico="zoom_in"></span></button>
+      <button type="button" class="icon-btn sk-button" data-btn="zoomout" aria-label="Zoom out"><span data-ico="zoom_out"></span></button>
+      <button type="button" class="icon-btn sk-button" data-btn="rotate" aria-label="Rotate camera"><span data-ico="rotate_r"></span></button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= menus ================= -->
+<div id="menu" class="overlay show">
+  <div class="panel sk-panel menu">
+    <div class="menu-left">
+      <h1 class="logo" id="logo"><span>TIDE</span>BREAKERS</h1>
+      <p class="tagline">Build above · Salvage below · Defend what floats</p>
+      <p class="brief">The world sank. Six castaways, a rusty salvage boat and three pontoons are all that's left of your crew. Net the drifting scrap, rescue survivors, dive the drowned city for lost technology — and keep the Red Wake raiders off your decks.</p>
+      <div class="mode" role="group" aria-label="Game mode">
+        <button type="button" class="chip sk-chip sel" data-mode="campaign"><b>Campaign</b><small>8 chapters, then play on forever</small></button>
+        <button type="button" class="chip sk-chip" data-mode="endless"><b>Endless</b><small>Build, scavenge and fight forever. Raids keep escalating.</small></button>
+      </div>
+      <div class="diff" role="group" aria-label="Difficulty">
+        <button type="button" class="chip sk-chip" data-diff="easy">Castaway</button>
+        <button type="button" class="chip sk-chip sel" data-diff="normal">Survivor</button>
+        <button type="button" class="chip sk-chip" data-diff="hard">Tidebreaker</button>
+      </div>
+      <label class="peace"><input type="checkbox" id="peaceful"> Peaceful seas (no raids)</label>
+      <div class="menu-btns">
+        <button type="button" id="continueBtn" class="cta sk-button_primary" hidden>Continue</button>
+        <button type="button" id="startBtn" class="cta sk-button_primary">Set sail</button>
+        <button type="button" id="installBtn" class="ghost sk-button" hidden>Install app</button>
+        <button type="button" id="menuSettings" class="ghost sk-button">Settings</button>
+        <a class="ghost sk-button" href="../index.html">All games</a>
+      </div>
+    </div>
+    <div class="menu-right">
+      <h2>Ship's log</h2>
+      <table class="keys">
+        <thead><tr><th>Action</th><th>Keyboard</th><th>Touch</th></tr></thead>
+        <tbody>
+          <tr><td>Steer the boat</td><td>WASD / Arrows</td><td>Left thumb</td></tr>
+          <tr><td>Deck gun (auto-aim)</td><td>Space / J (hold)</td><td>GUN</td></tr>
+          <tr><td>Harpoon</td><td>K</td><td>HARPOON</td></tr>
+          <tr><td>Salvage net / Dive</td><td>E</td><td>NET / DIVE</td></tr>
+          <tr><td>Sonar ping</td><td>Q</td><td>SONAR</td></tr>
+          <tr><td>Build menu</td><td>B</td><td>Build</td></tr>
+          <tr><td>Town · Trade · Quests</td><td>I · T · L</td><td>Left buttons</td></tr>
+          <tr><td>Rotate · Zoom camera</td><td>Z / C · wheel, + −</td><td>Buttons · pinch</td></tr>
+          <tr><td>Pause</td><td>P / Esc</td><td>II</td></tr>
+        </tbody>
+      </table>
+      <ul class="tips">
+        <li>Lower the net (E) and sail through floating wood, plastic and crates. Sail into the dock to unload.</li>
+        <li>Stop beside a raft with an SOS flag to rescue castaways. They need beds in town.</li>
+        <li>Stop over bubbles and press E to send a diver down for electronics and blueprints.</li>
+        <li>Food and water run out every day. Fishing nets, rain catchers and desalinators keep the town alive.</li>
+        <li>A happy town attracts settlers — and raiders. Watchtowers and harpoon turrets defend it.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div id="pause" class="overlay">
+  <div class="panel sk-panel small">
+    <h2 class="title">Paused</h2>
+    <div class="stack">
+      <button type="button" id="resumeBtn" class="cta sk-button_primary">Resume</button>
+      <button type="button" id="pauseSettings" class="ghost sk-button">Settings</button>
+      <button type="button" id="saveQuitBtn" class="ghost sk-button">Save &amp; main menu</button>
+    </div>
+  </div>
+</div>
+
+<div id="panel" class="overlay">
+  <div class="panel sk-panel wide">
+    <header class="panel-head sk-panel_header">
+      <span class="panel-ico" id="panelIco"></span>
+      <h2 class="title" id="panelTitle">Town</h2>
+      <button type="button" class="icon-btn sk-button" id="panelClose" aria-label="Close"><span data-ico="close"></span></button>
+    </header>
+    <div class="panel-body" id="panelBody"></div>
+  </div>
+</div>
+
+<div id="end" class="overlay">
+  <div class="panel sk-panel small">
+    <h2 class="title" id="endTitle">The town is lost</h2>
+    <p id="endText"></p>
+    <dl id="endStats" class="stats"></dl>
+    <div class="stack">
+      <button type="button" id="endLoad" class="cta sk-button_primary">Load last save</button>
+      <button type="button" id="endMenu" class="ghost sk-button">Main menu</button>
+    </div>
+  </div>
+</div>
+
+<div id="loading" class="overlay show">
+  <div class="load-box">
+    <div class="logo small"><span>TIDE</span>BREAKERS</div>
+    <div class="bar sk-bar_track"><i id="loadFill" class="sk-bar_progress"></i></div>
+    <p id="loadText">Charting the drowned world…</p>
+  </div>
+</div>
+
+<div id="rotate" class="rotate"><div class="phone"></div><p>Turn your phone sideways to play</p></div>
+<div id="errbox" role="alert"></div>
+
+<script>
+  // shows script errors on screen (handy on phones without dev tools)
+  (function () {
+    var box = document.getElementById('errbox');
+    function report(msg) { box.textContent += (box.textContent ? '\n' : '') + 'Tidebreakers error: ' + msg; box.className = 'show'; }
+    window.addEventListener('error', function (e) { if (e.message) report(e.message + (e.lineno ? ' (' + (e.filename || '').split('/').pop() + ':' + e.lineno + ')' : '')); });
+    window.addEventListener('unhandledrejection', function (e) { report('promise: ' + (e.reason && e.reason.message || e.reason)); });
+    window.__threeFail = setTimeout(function () { if (!window.THREE) report('Could not load the 3D engine. Check your connection and reload.'); }, 15000);
+  })();
+</script>
+<!-- Three.js arrives as a module; the game scripts wait for it (TB.boot in game.js) -->
+<script type="module">
+  import * as THREE from 'three';
+  import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+  import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+  window.THREE = THREE; window.GLTFLoader = GLTFLoader; window.SkeletonUtils = SkeletonUtils;
+  window.dispatchEvent(new Event('three-ready'));
+</script>
+<script src="js/core.js"></script>
+<script src="js/skin.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/gfx.js"></script>
+<script src="js/models.js"></script>
+<script src="js/world.js"></script>
+<script src="js/town.js"></script>
+<script src="js/boat.js"></script>
+<script src="js/actors.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>

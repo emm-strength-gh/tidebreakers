@@ -1,0 +1,4 @@
+{
+  "_readme": "List .glb models here to replace the built-in low-poly ones. Keys are slot names (see docs/GLB-MODELS.md). Keys starting with _ are ignored.",
+  "_example": { "boat_player": {}, "bld_house": { "scale": 1.1, "yaw": 90 }, "person": { "anims": { "walk": "Walking", "idle": "Idle" } } }
+}

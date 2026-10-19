@@ -1,0 +1,5 @@
+{
+  "_readme": "Sample models. Load with ?models=assets/models/_samples/",
+  "boat_player": {},
+  "bld_house": {}
+}
